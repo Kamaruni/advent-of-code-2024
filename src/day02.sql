@@ -1,32 +1,6 @@
 \i src/prelude.sql
 copy raw_lines (line) from '../input/day02.txt';
 
--- part 1
-with levels as (
-    select
-        row_number() over () as report_no,
-        unnest(cast(string_to_array(line, ' ') as int[])) as level
-    from raw_lines
-), level_changes as (
-    select
-        report_no,
-        level,
-        lead(level) over (partition by report_no) - level as change
-    from levels
-), analyzed_level_changes as (
-    select
-        report_no,
-        array_agg(change),
-        every(change > 0) as all_inc,
-        every(change < 0) as all_dec,
-        every(abs(change) between 1 and 3) as diff_ok
-    from level_changes
-    group by report_no
-)
-select count(*) as safe
-from analyzed_level_changes
-where (all_inc or all_dec) and diff_ok;
-
 with levels as (
     select report_no,
            row_number() over (partition by report_no) as element_no,
@@ -90,5 +64,6 @@ safe_reports as (
     from dampened_level_changes
     group by report_no
 )
-select count(*) filter (where safe)
-from safe_reports;
+select
+    (select count(*) filter (where omitted_element_no = 0 and safe) from dampened_level_changes) as solution_part_1,
+    (select count(*) filter (where safe) from safe_reports) as solution_part_2;
