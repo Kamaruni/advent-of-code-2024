@@ -10,4 +10,4 @@ I am using docker compose to run PostgreSQL, it can be started with
 
 The individual days can be run using the `run.sh` script, e.g.
 
-    ./run.sh src/day01.txt
+    ./run.sh src/day01.sql
