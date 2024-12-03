@@ -1,7 +1,7 @@
 \i src/prelude.sql
 copy raw_lines (line) from '../input/day03.txt';
 
-with instruction_parts as (
+with recursive instruction_parts as (
     select
         array_remove(
             regexp_matches(line, '(mul)\((\d+),(\d+)\)|(don''t)\(\)|(do)\(\)', 'g'), null
@@ -18,26 +18,26 @@ instructions as (
     union all
     select 0, 'do', null, null
 ),
-conditional_instructions as (
+results as (
     select
-        instruction_no,
-        instruction,
-        lhs,
-        rhs,
-        (
-            select case prev.instruction
-                when 'do' then true
-                when 'don''t' then false
-            end
-            from instructions as prev
-            where prev.instruction_no <= instructions.instruction_no
-            and prev.instruction in ('do', 'don''t')
-            order by instruction_no desc
-            limit 1
-        ) as execute
+        instructions.*,
+        true as execute,
+        cast(null as int) as result
     from instructions
+    where instruction_no = 0
+    union all
+    select
+        instructions.*,
+        case instructions.instruction
+            when 'do' then true
+            when 'don''t' then false
+            else results.execute
+        end as execute,
+        instructions.lhs * instructions.rhs as result
+    from instructions, results
+    where instructions.instruction_no = results.instruction_no + 1
 )
 select
-    sum(lhs * rhs) as solution_part_1,
-    sum(lhs * rhs) filter (where execute) as solution_part_2
-from conditional_instructions;
+    sum(result) as soltution_part_1,
+    sum(result) filter (where execute) as solution_part_2
+from results;
