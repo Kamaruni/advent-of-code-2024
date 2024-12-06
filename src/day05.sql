@@ -1,36 +1,6 @@
 \i src/prelude.sql
 copy raw_lines (line) from '../input/day05.txt';
 
-insert into raw_lines(line) values
-('47|53'),
-('97|13'),
-('97|61'),
-('97|47'),
-('75|29'),
-('61|13'),
-('75|53'),
-('29|13'),
-('97|29'),
-('53|29'),
-('61|53'),
-('97|53'),
-('61|29'),
-('47|13'),
-('75|47'),
-('97|75'),
-('47|61'),
-('75|61'),
-('47|29'),
-('75|13'),
-('53|13'),
-(''),
-('75,47,61,53,29'),
-('97,61,53,29,13'),
-('75,29,13'),
-('75,97,47,61,53'),
-('61,13,29'),
-('97,13,75,29,47');
-
 with rules as (
     select
         split_part(line, '|', 1)::int as before,
@@ -46,30 +16,78 @@ page_updates as (
     from (select row_number() over () as update_no, * from raw_lines where line like '%,%') as lines,
     lateral regexp_split_to_table(line, ',') with ordinality as pages(page, page_no)
 ),
-checked_updates as (
-    select
-        *,
-        not exists(
-            select rules.before
-            from rules
-            join page_updates as after
-            on before.update_no = after.update_no
-            and after.page_no = before.page_no + 1
-            and rules.before = after.page
-            where rules.after = before.page
-        ) as is_ordered
-    from page_updates as before
-),
-correctly_ordered_updates as (
+ranked_updates as (
     select
         update_no,
         page_no,
         page,
-        bool_and(is_ordered) over same_update as is_ordered,
-        (max(page_no) over same_update) / 2 + 1 as middle_page_no
-    from checked_updates
-    window same_update as (partition by update_no rows between unbounded preceding and unbounded following)
+        (
+            select count(rules.before)
+            from rules
+            where rules.after = current.page
+              and exists(
+                select 1
+                from page_updates as others
+                where others.update_no = current.update_no
+                and rules.before = others.page
+                and others.page_no <> current.page_no
+            )
+        ) as before_rank,
+        (
+            select count(rules.after)
+            from rules
+            where rules.before = current.page
+            and exists(
+                select 1
+                from page_updates as others
+                where others.update_no = current.update_no
+                and rules.after = others.page
+                and others.page_no <> current.page_no
+            )
+        ) as after_rank
+    from page_updates as current
+),
+sorted_updates as (
+    select *
+    from ranked_updates
+    order by update_no, before_rank, after_rank desc
+),
+corrected_updates as (
+    select
+        *,
+        array((
+            select other.page
+            from sorted_updates as other
+            where other.update_no = this.update_no
+            order by other.before_rank, other.after_rank desc
+        )) <> array(
+            select other.page
+            from sorted_updates as other
+            where other.update_no = this.update_no
+            order by other.page_no
+        ) as was_reordered
+    from sorted_updates as this
+),
+part1 as (
+    select sum(page) as solution
+    from corrected_updates
+    where not was_reordered
+    and corrected_updates.page_no = (
+        select max(other.page_no) / 2 + 1
+        from corrected_updates as other
+        where corrected_updates.update_no = other.update_no
+    )
+),
+part2 as (
+    select sum(page) as solution
+    from corrected_updates
+    where was_reordered
+    and corrected_updates.before_rank = (
+        select max(other.before_rank) / 2
+        from corrected_updates as other
+        where corrected_updates.update_no = other.update_no
+    )
 )
-select sum(page)
-from correctly_ordered_updates
-where middle_page_no = page_no and is_ordered;
+select
+    (select solution from part1) as solution_part_1,
+    (select solution from part2) as solution_part_2;
